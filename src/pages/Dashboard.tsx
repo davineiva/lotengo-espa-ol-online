@@ -1,7 +1,12 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LogOut, BookOpen, ClipboardList, GraduationCap, CalendarDays } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import MaterialTab from "@/components/dashboard/MaterialTab";
+import TarefasTab from "@/components/dashboard/TarefasTab";
+import ExamesTab from "@/components/dashboard/ExamesTab";
+import AgendaTab from "@/components/dashboard/AgendaTab";
 
 const Dashboard = () => {
   const { user, roles, loading, signOut } = useAuth();
@@ -38,25 +43,35 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12">
-        <h1 className="font-heading font-bold text-3xl mb-2">
+      <main className="container mx-auto px-4 py-8">
+        <h1 className="font-heading font-bold text-3xl mb-1">
           Olá, bem-vindo(a)! 👋
         </h1>
-        <p className="text-muted-foreground mb-8">
+        <p className="text-muted-foreground mb-6">
           Seu papel: <span className="font-semibold text-primary capitalize">{roles[0] || "aluno"}</span>
         </p>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {["📚 Material de Aula", "📝 Tarefas", "📊 Exames", "📅 Agenda"].map((item) => (
-            <div
-              key={item}
-              className="rounded-xl border bg-card p-6 hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <h3 className="font-heading font-semibold text-lg">{item}</h3>
-              <p className="text-sm text-muted-foreground mt-2">Em breve</p>
-            </div>
-          ))}
-        </div>
+        <Tabs defaultValue="material" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-1">
+            <TabsTrigger value="material" className="gap-2 text-xs sm:text-sm py-2">
+              <BookOpen className="w-4 h-4" /> Material
+            </TabsTrigger>
+            <TabsTrigger value="tarefas" className="gap-2 text-xs sm:text-sm py-2">
+              <ClipboardList className="w-4 h-4" /> Tarefas
+            </TabsTrigger>
+            <TabsTrigger value="exames" className="gap-2 text-xs sm:text-sm py-2">
+              <GraduationCap className="w-4 h-4" /> Exames
+            </TabsTrigger>
+            <TabsTrigger value="agenda" className="gap-2 text-xs sm:text-sm py-2">
+              <CalendarDays className="w-4 h-4" /> Agenda
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="material"><MaterialTab /></TabsContent>
+          <TabsContent value="tarefas"><TarefasTab /></TabsContent>
+          <TabsContent value="exames"><ExamesTab /></TabsContent>
+          <TabsContent value="agenda"><AgendaTab /></TabsContent>
+        </Tabs>
       </main>
     </div>
   );
