@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, BookOpen, ClipboardList, GraduationCap, CalendarDays } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import MaterialTab from "@/components/dashboard/MaterialTab";
 import TarefasTab from "@/components/dashboard/TarefasTab";
 import ExamesTab from "@/components/dashboard/ExamesTab";
@@ -33,6 +33,11 @@ const Dashboard = () => {
             <span className="text-secondary">go</span>
           </span>
           <div className="flex items-center gap-4">
+            {roles.includes("professor") && (
+              <Link to="/professor">
+                <Button variant="outline" size="sm">Área do Professor</Button>
+              </Link>
+            )}
             <span className="text-sm text-muted-foreground hidden sm:block">
               {user.email}
             </span>
