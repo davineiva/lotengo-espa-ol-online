@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap } from "lucide-react";
+import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 type Profile = {
   id: string;
@@ -41,7 +42,8 @@ const AdminDashboard = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("todos");
   const fetchData = async () => {
     setLoadingData(true);
     const [profilesRes, rolesRes] = await Promise.all([
@@ -114,6 +116,11 @@ const AdminDashboard = () => {
   const totalProfessores = new Set(userRoles.filter((r) => r.role === "professor").map((r) => r.user_id)).size;
   const totalAdmins = new Set(userRoles.filter((r) => r.role === "admin").map((r) => r.user_id)).size;
 
+  const filteredProfiles = profiles.filter((profile) => {
+    const matchesSearch = profile.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole = roleFilter === "todos" || getRolesForUser(profile.user_id).some((r) => r.role === roleFilter);
+    return matchesSearch && matchesRole;
+  });
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/80 backdrop-blur-lg sticky top-0 z-50">
@@ -173,11 +180,33 @@ const AdminDashboard = () => {
             <CardTitle>Usuários</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-[160px]">
+                  <SelectValue placeholder="Filtrar papel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="aluno">Alunos</SelectItem>
+                  <SelectItem value="professor">Professores</SelectItem>
+                  <SelectItem value="admin">Admins</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {loadingData ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
               </div>
-            ) : profiles.length === 0 ? (
+            ) : filteredProfiles.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
             ) : (
               <Table>
@@ -191,7 +220,7 @@ const AdminDashboard = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {profiles.map((profile) => {
+                  {filteredProfiles.map((profile) => {
                     const uRoles = getRolesForUser(profile.user_id);
                     return (
                       <TableRow key={profile.id}>
