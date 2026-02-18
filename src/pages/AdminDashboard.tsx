@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search } from "lucide-react";
+import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
@@ -37,6 +37,8 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "destructive",
 } as const;
 
+const ITEMS_PER_PAGE = 10;
+
 const AdminDashboard = () => {
   const { user, roles, loading, signOut } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -44,6 +46,7 @@ const AdminDashboard = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("todos");
+  const [currentPage, setCurrentPage] = useState(1);
   const fetchData = async () => {
     setLoadingData(true);
     const [profilesRes, rolesRes] = await Promise.all([
@@ -60,6 +63,10 @@ const AdminDashboard = () => {
       fetchData();
     }
   }, [user, roles]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter]);
 
   const getRolesForUser = (userId: string) =>
     userRoles.filter((r) => r.user_id === userId);
@@ -121,6 +128,13 @@ const AdminDashboard = () => {
     const matchesRole = roleFilter === "todos" || getRolesForUser(profile.user_id).some((r) => r.role === roleFilter);
     return matchesSearch && matchesRole;
   });
+
+  const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
+  const paginatedProfiles = filteredProfiles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/80 backdrop-blur-lg sticky top-0 z-50">
@@ -209,64 +223,94 @@ const AdminDashboard = () => {
             ) : filteredProfiles.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Papéis</TableHead>
-                    <TableHead>Adicionar Papel</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProfiles.map((profile) => {
-                    const uRoles = getRolesForUser(profile.user_id);
-                    return (
-                      <TableRow key={profile.id}>
-                        <TableCell className="font-medium">{profile.full_name}</TableCell>
-                        <TableCell>{profile.phone || "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {uRoles.map((r) => (
-                              <Badge
-                                key={r.id}
-                                variant={ROLE_COLORS[r.role] as "default" | "secondary" | "destructive"}
-                                className="cursor-pointer gap-1"
-                                onClick={() => handleRemoveRole(r.id, r.role)}
-                                title="Clique para remover"
-                              >
-                                {ROLE_LABELS[r.role]} ×
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Select onValueChange={(val) => handleAddRole(profile.user_id, val)}>
-                            <SelectTrigger className="w-[140px]">
-                              <SelectValue placeholder="Papel..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="aluno">Aluno</SelectItem>
-                              <SelectItem value="professor">Professor</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteProfile(profile.id, profile.full_name)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Papéis</TableHead>
+                      <TableHead>Adicionar Papel</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedProfiles.map((profile) => {
+                      const uRoles = getRolesForUser(profile.user_id);
+                      return (
+                        <TableRow key={profile.id}>
+                          <TableCell className="font-medium">{profile.full_name}</TableCell>
+                          <TableCell>{profile.phone || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {uRoles.map((r) => (
+                                <Badge
+                                  key={r.id}
+                                  variant={ROLE_COLORS[r.role] as "default" | "secondary" | "destructive"}
+                                  className="cursor-pointer gap-1"
+                                  onClick={() => handleRemoveRole(r.id, r.role)}
+                                  title="Clique para remover"
+                                >
+                                  {ROLE_LABELS[r.role]} ×
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Select onValueChange={(val) => handleAddRole(profile.user_id, val)}>
+                              <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Papel..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="aluno">Aluno</SelectItem>
+                                <SelectItem value="professor">Professor</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteProfile(profile.id, profile.full_name)}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredProfiles.length)} de {filteredProfiles.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm font-medium">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
