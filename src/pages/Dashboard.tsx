@@ -33,6 +33,11 @@ const Dashboard = () => {
             <span className="text-secondary">go</span>
           </span>
           <div className="flex items-center gap-4">
+            {roles.includes("admin") && (
+              <Link to="/admin">
+                <Button variant="outline" size="sm">Painel Admin</Button>
+              </Link>
+            )}
             {roles.includes("professor") && (
               <Link to="/professor">
                 <Button variant="outline" size="sm">Área do Professor</Button>
