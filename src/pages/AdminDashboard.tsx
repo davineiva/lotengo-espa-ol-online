@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
@@ -107,6 +107,28 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = ["Nome", "Telefone", "Papéis", "Criado em"];
+    const rows = filteredProfiles.map((profile) => {
+      const uRoles = getRolesForUser(profile.user_id).map((r) => ROLE_LABELS[r.role]).join("; ");
+      return [
+        profile.full_name,
+        profile.phone || "",
+        uRoles,
+        new Date(profile.created_at).toLocaleDateString("pt-BR"),
+      ];
+    });
+    const csvContent = [headers, ...rows].map((row) => row.map((v) => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `usuarios_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado com sucesso!");
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -190,8 +212,11 @@ const AdminDashboard = () => {
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Usuários</CardTitle>
+            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={filteredProfiles.length === 0}>
+              <Download className="h-4 w-4 mr-2" /> Exportar CSV
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
