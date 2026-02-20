@@ -10,6 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Profile = {
   id: string;
@@ -47,6 +57,8 @@ const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [currentPage, setCurrentPage] = useState(1);
+  const [confirmRemoveRole, setConfirmRemoveRole] = useState<{ id: string; role: string; userName: string } | null>(null);
+  const [confirmDeleteProfile, setConfirmDeleteProfile] = useState<{ id: string; userName: string } | null>(null);
   const fetchData = async () => {
     setLoadingData(true);
     const [profilesRes, rolesRes] = await Promise.all([
@@ -94,10 +106,10 @@ const AdminDashboard = () => {
       toast.success(`Papel ${ROLE_LABELS[roleName]} removido.`);
       fetchData();
     }
+    setConfirmRemoveRole(null);
   };
 
-  const handleDeleteProfile = async (profileId: string, userName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir o perfil de ${userName}?`)) return;
+  const handleDeleteProfile = async (profileId: string) => {
     const { error } = await supabase.from("profiles").delete().eq("id", profileId);
     if (error) {
       toast.error("Erro ao excluir perfil: " + error.message);
@@ -105,6 +117,7 @@ const AdminDashboard = () => {
       toast.success("Perfil excluído.");
       fetchData();
     }
+    setConfirmDeleteProfile(null);
   };
 
   const handleExportCSV = () => {
@@ -273,7 +286,7 @@ const AdminDashboard = () => {
                                   key={r.id}
                                   variant={ROLE_COLORS[r.role] as "default" | "secondary" | "destructive"}
                                   className="cursor-pointer gap-1"
-                                  onClick={() => handleRemoveRole(r.id, r.role)}
+                                  onClick={() => setConfirmRemoveRole({ id: r.id, role: r.role, userName: profile.full_name })}
                                   title="Clique para remover"
                                 >
                                   {ROLE_LABELS[r.role]} ×
@@ -297,7 +310,7 @@ const AdminDashboard = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDeleteProfile(profile.id, profile.full_name)}
+                              onClick={() => setConfirmDeleteProfile({ id: profile.id, userName: profile.full_name })}
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
@@ -340,6 +353,48 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
       </main>
+
+      {/* Dialog: Remover papel */}
+      <AlertDialog open={!!confirmRemoveRole} onOpenChange={(open) => !open && setConfirmRemoveRole(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover papel</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover o papel <strong>{confirmRemoveRole ? ROLE_LABELS[confirmRemoveRole.role] : ""}</strong> de <strong>{confirmRemoveRole?.userName}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => confirmRemoveRole && handleRemoveRole(confirmRemoveRole.id, confirmRemoveRole.role)}
+            >
+              Remover papel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog: Excluir perfil */}
+      <AlertDialog open={!!confirmDeleteProfile} onOpenChange={(open) => !open && setConfirmDeleteProfile(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir perfil</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o perfil de <strong>{confirmDeleteProfile?.userName}</strong>? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => confirmDeleteProfile && handleDeleteProfile(confirmDeleteProfile.id)}
+            >
+              Excluir perfil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
