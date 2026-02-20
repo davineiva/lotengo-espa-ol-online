@@ -1,0 +1,20 @@
+
+-- Admins podem ver todos os perfis
+CREATE POLICY "Admins can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (has_role(auth.uid(), 'admin'::app_role));
+
+-- Admins podem excluir perfis
+CREATE POLICY "Admins can delete profiles"
+  ON public.profiles FOR DELETE
+  USING (has_role(auth.uid(), 'admin'::app_role));
+
+-- Admins podem inserir papéis
+CREATE POLICY "Admins can insert roles"
+  ON public.user_roles FOR INSERT
+  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
+
+-- Admins podem deletar papéis
+CREATE POLICY "Admins can delete roles"
+  ON public.user_roles FOR DELETE
+  USING (has_role(auth.uid(), 'admin'::app_role));
