@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Profile = {
   id: string;
@@ -33,6 +34,15 @@ type UserRole = {
   id: string;
   user_id: string;
   role: "aluno" | "professor" | "admin";
+};
+
+type AuditLog = {
+  id: string;
+  admin_user_id: string;
+  action: string;
+  target_user_id: string | null;
+  details: string | null;
+  created_at: string;
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -53,12 +63,60 @@ const AdminDashboard = () => {
   const { user, roles, loading, signOut } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [userEmails, setUserEmails] = useState<Record<string, string>>({});
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [currentPage, setCurrentPage] = useState(1);
   const [confirmRemoveRole, setConfirmRemoveRole] = useState<{ id: string; role: string; userName: string } | null>(null);
   const [confirmDeleteProfile, setConfirmDeleteProfile] = useState<{ id: string; userName: string } | null>(null);
+
+  const fetchEmails = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke("get-user-emails", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        console.error("Error fetching emails:", error);
+        return;
+      }
+
+      if (data?.users) {
+        const emailMap: Record<string, string> = {};
+        for (const u of data.users) {
+          emailMap[u.id] = u.email;
+        }
+        setUserEmails(emailMap);
+      }
+    } catch (err) {
+      console.error("Error fetching emails:", err);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    const { data } = await supabase
+      .from("admin_audit_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (data) setAuditLogs(data as AuditLog[]);
+  };
+
+  const logAction = async (action: string, targetUserId: string | null, details: string) => {
+    if (!user) return;
+    await supabase.from("admin_audit_log").insert({
+      admin_user_id: user.id,
+      action,
+      target_user_id: targetUserId,
+      details,
+    });
+  };
+
   const fetchData = async () => {
     setLoadingData(true);
     const [profilesRes, rolesRes] = await Promise.all([
@@ -73,6 +131,8 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (user && roles.includes("admin")) {
       fetchData();
+      fetchEmails();
+      fetchAuditLogs();
     }
   }, [user, roles]);
 
@@ -83,49 +143,65 @@ const AdminDashboard = () => {
   const getRolesForUser = (userId: string) =>
     userRoles.filter((r) => r.user_id === userId);
 
+  const getProfileName = (userId: string) => {
+    const p = profiles.find((pr) => pr.user_id === userId);
+    return p?.full_name || userEmails[userId] || userId.slice(0, 8);
+  };
+
   const handleAddRole = async (userId: string, role: string) => {
     const existing = userRoles.find((r) => r.user_id === userId && r.role === role);
     if (existing) {
       toast.info("Usuário já possui esse papel.");
       return;
     }
+    const userName = getProfileName(userId);
     const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: role as "aluno" | "professor" | "admin" });
     if (error) {
       toast.error("Erro ao adicionar papel: " + error.message);
     } else {
       toast.success(`Papel ${ROLE_LABELS[role]} adicionado.`);
+      await logAction("add_role", userId, `Adicionou papel ${ROLE_LABELS[role]} para ${userName}`);
       fetchData();
+      fetchAuditLogs();
     }
   };
 
   const handleRemoveRole = async (roleId: string, roleName: string) => {
+    const roleRecord = userRoles.find((r) => r.id === roleId);
+    const userName = roleRecord ? getProfileName(roleRecord.user_id) : "";
     const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
     if (error) {
       toast.error("Erro ao remover papel: " + error.message);
     } else {
       toast.success(`Papel ${ROLE_LABELS[roleName]} removido.`);
+      await logAction("remove_role", roleRecord?.user_id || null, `Removeu papel ${ROLE_LABELS[roleName]} de ${userName}`);
       fetchData();
+      fetchAuditLogs();
     }
     setConfirmRemoveRole(null);
   };
 
   const handleDeleteProfile = async (profileId: string) => {
+    const profile = profiles.find((p) => p.id === profileId);
     const { error } = await supabase.from("profiles").delete().eq("id", profileId);
     if (error) {
       toast.error("Erro ao excluir perfil: " + error.message);
     } else {
       toast.success("Perfil excluído.");
+      await logAction("delete_profile", profile?.user_id || null, `Excluiu perfil de ${profile?.full_name || "desconhecido"}`);
       fetchData();
+      fetchAuditLogs();
     }
     setConfirmDeleteProfile(null);
   };
 
   const handleExportCSV = () => {
-    const headers = ["Nome", "Telefone", "Papéis", "Criado em"];
+    const headers = ["Nome", "E-mail", "Telefone", "Papéis", "Criado em"];
     const rows = filteredProfiles.map((profile) => {
       const uRoles = getRolesForUser(profile.user_id).map((r) => ROLE_LABELS[r.role]).join("; ");
       return [
         profile.full_name,
+        userEmails[profile.user_id] || "",
         profile.phone || "",
         uRoles,
         new Date(profile.created_at).toLocaleDateString("pt-BR"),
@@ -159,7 +235,10 @@ const AdminDashboard = () => {
   const totalAdmins = new Set(userRoles.filter((r) => r.role === "admin").map((r) => r.user_id)).size;
 
   const filteredProfiles = profiles.filter((profile) => {
-    const matchesSearch = profile.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const email = userEmails[profile.user_id] || "";
+    const matchesSearch =
+      profile.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === "todos" || getRolesForUser(profile.user_id).some((r) => r.role === roleFilter);
     return matchesSearch && matchesRole;
   });
@@ -224,134 +303,185 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Usuários</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={filteredProfiles.length === 0}>
-              <Download className="h-4 w-4 mr-2" /> Exportar CSV
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Filtrar papel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="aluno">Alunos</SelectItem>
-                  <SelectItem value="professor">Professores</SelectItem>
-                  <SelectItem value="admin">Admins</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {loadingData ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-              </div>
-            ) : filteredProfiles.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Papéis</TableHead>
-                      <TableHead>Adicionar Papel</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedProfiles.map((profile) => {
-                      const uRoles = getRolesForUser(profile.user_id);
-                      return (
-                        <TableRow key={profile.id}>
-                          <TableCell className="font-medium">{profile.full_name}</TableCell>
-                          <TableCell>{profile.phone || "—"}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {uRoles.map((r) => (
-                                <Badge
-                                  key={r.id}
-                                  variant={ROLE_COLORS[r.role] as "default" | "secondary" | "destructive"}
-                                  className="cursor-pointer gap-1"
-                                  onClick={() => setConfirmRemoveRole({ id: r.id, role: r.role, userName: profile.full_name })}
-                                  title="Clique para remover"
-                                >
-                                  {ROLE_LABELS[r.role]} ×
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Select onValueChange={(val) => handleAddRole(profile.user_id, val)}>
-                              <SelectTrigger className="w-[140px]">
-                                <SelectValue placeholder="Papel..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="aluno">Aluno</SelectItem>
-                                <SelectItem value="professor">Professor</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setConfirmDeleteProfile({ id: profile.id, userName: profile.full_name })}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between pt-4">
-                    <p className="text-sm text-muted-foreground">
-                      Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredProfiles.length)} de {filteredProfiles.length}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm font-medium">
-                        {currentPage} / {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+        <Tabs defaultValue="usuarios">
+          <TabsList>
+            <TabsTrigger value="usuarios"><Users className="h-4 w-4 mr-2" /> Usuários</TabsTrigger>
+            <TabsTrigger value="auditoria"><ClipboardList className="h-4 w-4 mr-2" /> Auditoria</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="usuarios">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Usuários</CardTitle>
+                <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={filteredProfiles.length === 0}>
+                  <Download className="h-4 w-4 mr-2" /> Exportar CSV
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome ou e-mail..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
                   </div>
+                  <Select value={roleFilter} onValueChange={setRoleFilter}>
+                    <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectValue placeholder="Filtrar papel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos</SelectItem>
+                      <SelectItem value="aluno">Alunos</SelectItem>
+                      <SelectItem value="professor">Professores</SelectItem>
+                      <SelectItem value="admin">Admins</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {loadingData ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                  </div>
+                ) : filteredProfiles.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>E-mail</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>Papéis</TableHead>
+                          <TableHead>Adicionar Papel</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedProfiles.map((profile) => {
+                          const uRoles = getRolesForUser(profile.user_id);
+                          return (
+                            <TableRow key={profile.id}>
+                              <TableCell className="font-medium">{profile.full_name}</TableCell>
+                              <TableCell className="text-muted-foreground text-sm">
+                                {userEmails[profile.user_id] || "—"}
+                              </TableCell>
+                              <TableCell>{profile.phone || "—"}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {uRoles.map((r) => (
+                                    <Badge
+                                      key={r.id}
+                                      variant={ROLE_COLORS[r.role] as "default" | "secondary" | "destructive"}
+                                      className="cursor-pointer gap-1"
+                                      onClick={() => setConfirmRemoveRole({ id: r.id, role: r.role, userName: profile.full_name })}
+                                      title="Clique para remover"
+                                    >
+                                      {ROLE_LABELS[r.role]} ×
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Select onValueChange={(val) => handleAddRole(profile.user_id, val)}>
+                                  <SelectTrigger className="w-[140px]">
+                                    <SelectValue placeholder="Papel..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="aluno">Aluno</SelectItem>
+                                    <SelectItem value="professor">Professor</SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setConfirmDeleteProfile({ id: profile.id, userName: profile.full_name })}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredProfiles.length)} de {filteredProfiles.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-medium">
+                            {currentPage} / {totalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="auditoria">
+            <Card>
+              <CardHeader>
+                <CardTitle>Log de Auditoria</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {auditLogs.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">Nenhuma ação registrada.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data/Hora</TableHead>
+                        <TableHead>Admin</TableHead>
+                        <TableHead>Ação</TableHead>
+                        <TableHead>Detalhes</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {new Date(log.created_at).toLocaleString("pt-BR")}
+                          </TableCell>
+                          <TableCell className="text-sm">{getProfileName(log.admin_user_id)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{log.action}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{log.details || "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Dialog: Remover papel */}
