@@ -1,73 +1,40 @@
 
-## RLS para Admin + Dialogs de Confirmação no Painel Admin
 
-### O que será feito
+## Plano: Paginação/Filtros na Auditoria + Reset de Senha pelo Admin
 
-**1. Corrigir e reforçar as políticas de banco de dados (RLS)**
+### 1. Paginação e filtros na aba de Auditoria
 
-Situação atual:
-- Admins não têm política de SELECT para ver todos os perfis (só professores têm)
-- Admins não têm política de DELETE em `profiles`
-- Admins não têm política de INSERT ou DELETE em `user_roles` — as operações do painel admin estão falhando no banco
+Atualmente a aba de auditoria mostra os últimos 50 logs sem filtro nem paginação.
 
-Políticas a serem adicionadas via migração SQL:
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar estados: `auditSearchQuery`, `auditActionFilter`, `auditCurrentPage`
+- Filtrar logs por texto (detalhes/nome do admin) e por tipo de ação (`add_role`, `remove_role`, `delete_profile`, `reset_password`)
+- Paginar com 10 itens por página, reutilizando o mesmo padrão de paginação da aba de usuários
+- Aumentar o limite de busca de 50 para 200 logs
 
-Em `profiles`:
-- Admins podem SELECT todos os perfis
-- Admins podem DELETE qualquer perfil
+### 2. Reset de senha de usuário pelo admin
 
-Em `user_roles`:
-- Admins podem INSERT novos papéis
-- Admins podem DELETE papéis existentes
+Criar uma Edge Function `admin-reset-password` que:
+- Valida que o chamador é admin (mesmo padrão da `get-user-emails`)
+- Recebe o `user_id` e o `email` do usuário alvo
+- Usa `serviceClient.auth.admin.generateLink({ type: 'recovery', email })` para gerar um link de recuperação
+- Retorna sucesso (o e-mail de reset é enviado automaticamente pelo sistema de auth)
 
-Obs: As políticas de SELECT dos professores em `profiles` e `user_roles` serão mantidas, pois o painel do professor (GerenciarAlunosTab) também depende delas para listar alunos.
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar botão de "Resetar senha" (ícone `KeyRound`) na coluna de ações de cada usuário
+- Adicionar AlertDialog de confirmação antes de disparar o reset
+- Ao confirmar, chamar a Edge Function e registrar a ação no log de auditoria
+- Toast de sucesso/erro
 
-**2. Substituir confirmações nativas por AlertDialog**
+**Alterações em `supabase/config.toml`:**
+- Adicionar `[functions.admin-reset-password]` com `verify_jwt = false`
 
-Substituir o `confirm()` nativo do browser e o clique direto no badge por dialogs visuais usando o componente `AlertDialog` já disponível no projeto.
+### Arquivos modificados
+- `src/pages/AdminDashboard.tsx` - paginação/filtros de auditoria + botão reset senha
+- `supabase/functions/admin-reset-password/index.ts` - nova Edge Function
+- `supabase/config.toml` - configuração da nova função
 
-Dois dialogs serão adicionados ao `AdminDashboard`:
+### Sobre o teste de login
 
-Dialog de remoção de papel:
-- Disparado ao clicar no badge de um papel
-- Exibe o nome do papel e do usuário
-- Botões: "Cancelar" e "Remover papel" (vermelho)
+Não é possível fazer login automatizado no browser de teste pois ele não compartilha a sessão do preview. Recomendo que você teste manualmente após a implementação.
 
-Dialog de exclusão de perfil:
-- Disparado ao clicar no ícone de lixeira
-- Exibe o nome do usuário
-- Avisa que a ação não pode ser desfeita
-- Botões: "Cancelar" e "Excluir perfil" (vermelho)
-
-### Detalhes técnicos
-
-**Migração SQL:**
-
-```sql
--- Admins podem ver todos os perfis
-CREATE POLICY "Admins can view all profiles"
-  ON public.profiles FOR SELECT
-  USING (has_role(auth.uid(), 'admin'::app_role));
-
--- Admins podem excluir perfis
-CREATE POLICY "Admins can delete profiles"
-  ON public.profiles FOR DELETE
-  USING (has_role(auth.uid(), 'admin'::app_role));
-
--- Admins podem inserir papéis
-CREATE POLICY "Admins can insert roles"
-  ON public.user_roles FOR INSERT
-  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
-
--- Admins podem deletar papéis
-CREATE POLICY "Admins can delete roles"
-  ON public.user_roles FOR DELETE
-  USING (has_role(auth.uid(), 'admin'::app_role));
-```
-
-**Alterações em `src/pages/AdminDashboard.tsx`:**
-- Adicionar imports: `AlertDialog`, `AlertDialogAction`, `AlertDialogCancel`, `AlertDialogContent`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogHeader`, `AlertDialogTitle`
-- Adicionar estado: `confirmRemoveRole` (guarda `{ id, role, userName }` ou null) e `confirmDeleteProfile` (guarda `{ id, userName }` ou null)
-- Substituir `onClick` do badge por `setConfirmRemoveRole({...})`
-- Substituir `handleDeleteProfile` com `confirm()` por `setConfirmDeleteProfile({...})`
-- Adicionar dois `AlertDialog` no JSX, controlados pelo estado acima, com as ações reais de DELETE ao confirmar
