@@ -1,62 +1,40 @@
 
 
-## Plano: Completar perfil Professor com funcionalidades avançadas
+## Plano: Paginação/Filtros na Auditoria + Reset de Senha pelo Admin
 
-O TeacherDashboard ja existe com 3 abas (Material, Tarefas, Alunos). Precisa ser expandido com as funcionalidades solicitadas.
+### 1. Paginação e filtros na aba de Auditoria
 
-### 1. Banco de dados -- novas tabelas
+Atualmente a aba de auditoria mostra os últimos 50 logs sem filtro nem paginação.
 
-**`student_notes`** -- notas/comentarios do professor para alunos:
-- `id` uuid PK
-- `teacher_id` uuid NOT NULL (quem escreveu)
-- `student_id` uuid NOT NULL (aluno alvo)
-- `content` text NOT NULL
-- `created_at` timestamptz DEFAULT now()
-- RLS: professor pode CRUD nas proprias notas
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar estados: `auditSearchQuery`, `auditActionFilter`, `auditCurrentPage`
+- Filtrar logs por texto (detalhes/nome do admin) e por tipo de ação (`add_role`, `remove_role`, `delete_profile`, `reset_password`)
+- Paginar com 10 itens por página, reutilizando o mesmo padrão de paginação da aba de usuários
+- Aumentar o limite de busca de 50 para 200 logs
 
-**`student_availability`** -- disponibilidade de horarios dos alunos (persistir o que hoje e local no AgendaTab):
-- `id` uuid PK
-- `user_id` uuid NOT NULL
-- `day_of_week` int NOT NULL (0-5, seg-sab)
-- `hour` int NOT NULL (8-19)
-- `created_at` timestamptz DEFAULT now()
-- UNIQUE(user_id, day_of_week, hour)
-- RLS: aluno pode CRUD nos proprios; professor pode SELECT todos
+### 2. Reset de senha de usuário pelo admin
 
-**`material_assignments`** -- vincular materiais a alunos especificos:
-- `id` uuid PK
-- `material_id` uuid FK -> materials
-- `student_id` uuid NOT NULL
-- `assigned_by` uuid NOT NULL
-- `created_at` timestamptz DEFAULT now()
-- RLS: professor pode INSERT/DELETE; aluno pode SELECT os proprios
+Criar uma Edge Function `admin-reset-password` que:
+- Valida que o chamador é admin (mesmo padrão da `get-user-emails`)
+- Recebe o `user_id` e o `email` do usuário alvo
+- Usa `serviceClient.auth.admin.generateLink({ type: 'recovery', email })` para gerar um link de recuperação
+- Retorna sucesso (o e-mail de reset é enviado automaticamente pelo sistema de auth)
 
-### 2. Alteracoes no TeacherDashboard
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar botão de "Resetar senha" (ícone `KeyRound`) na coluna de ações de cada usuário
+- Adicionar AlertDialog de confirmação antes de disparar o reset
+- Ao confirmar, chamar a Edge Function e registrar a ação no log de auditoria
+- Toast de sucesso/erro
 
-Expandir de 3 para 5 abas:
+**Alterações em `supabase/config.toml`:**
+- Adicionar `[functions.admin-reset-password]` com `verify_jwt = false`
 
-1. **Material** (existente) -- adicionar seletor de alunos ao enviar material (multi-select com checkboxes dos alunos cadastrados). Ao enviar, insere em `material_assignments` para cada aluno selecionado.
+### Arquivos modificados
+- `src/pages/AdminDashboard.tsx` - paginação/filtros de auditoria + botão reset senha
+- `supabase/functions/admin-reset-password/index.ts` - nova Edge Function
+- `supabase/config.toml` - configuração da nova função
 
-2. **Tarefas** (existente) -- manter como esta.
+### Sobre o teste de login
 
-3. **Alunos** (existente) -- adicionar coluna de acoes na tabela, com botao para abrir modal de notas/comentarios por aluno. No modal, listar notas anteriores e formulario para adicionar nova nota.
-
-4. **Horarios** (nova aba) -- professor seleciona um grupo de alunos via checkboxes, e o sistema cruza as disponibilidades salvas em `student_availability`, exibindo uma grade visual com os horarios em comum destacados.
-
-5. **Notas** (nova aba, opcional) -- visao geral de todas as notas/comentarios que o professor adicionou, com filtro por aluno.
-
-### 3. Alteracoes no Dashboard do Aluno
-
-- **AgendaTab**: persistir a disponibilidade no banco (`student_availability`) em vez de manter apenas em estado local.
-- **MaterialTab**: trocar mock data por dados reais, filtrando `material_assignments` pelo `student_id` do usuario logado para mostrar apenas materiais atribuidos a ele.
-
-### 4. Arquivos modificados/criados
-
-- **Migracoes SQL**: criar tabelas `student_notes`, `student_availability`, `material_assignments` com RLS
-- `src/components/teacher/UploadMaterialTab.tsx` -- adicionar seletor de alunos
-- `src/components/teacher/GerenciarAlunosTab.tsx` -- adicionar coluna de notas/comentarios
-- `src/components/teacher/HorariosTab.tsx` (novo) -- cruzamento de disponibilidades
-- `src/components/dashboard/AgendaTab.tsx` -- persistir no banco
-- `src/components/dashboard/MaterialTab.tsx` -- dados reais do banco
-- `src/pages/TeacherDashboard.tsx` -- adicionar aba Horarios
+Não é possível fazer login automatizado no browser de teste pois ele não compartilha a sessão do preview. Recomendo que você teste manualmente após a implementação.
 
