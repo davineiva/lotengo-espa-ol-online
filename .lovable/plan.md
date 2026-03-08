@@ -1,40 +1,35 @@
 
 
-## Plano: Paginação/Filtros na Auditoria + Reset de Senha pelo Admin
+## Plano: "Esqueci a senha" + Como definir administrador
 
-### 1. Paginação e filtros na aba de Auditoria
+### 1. Fluxo "Esqueci a senha"
 
-Atualmente a aba de auditoria mostra os últimos 50 logs sem filtro nem paginação.
+**Criar página `/esqueci-senha`:**
+- Formulário com campo de e-mail
+- Chama `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`
+- Mostra mensagem de sucesso após envio
 
-**Alterações em `AdminDashboard.tsx`:**
-- Adicionar estados: `auditSearchQuery`, `auditActionFilter`, `auditCurrentPage`
-- Filtrar logs por texto (detalhes/nome do admin) e por tipo de ação (`add_role`, `remove_role`, `delete_profile`, `reset_password`)
-- Paginar com 10 itens por página, reutilizando o mesmo padrão de paginação da aba de usuários
-- Aumentar o limite de busca de 50 para 200 logs
+**Criar página `/reset-password`:**
+- Detecta o token de recuperação na URL (hash com `type=recovery`)
+- Formulário para digitar nova senha (com confirmação)
+- Chama `supabase.auth.updateUser({ password })` para salvar
+- Redireciona para `/login` após sucesso
 
-### 2. Reset de senha de usuário pelo admin
+**Alterar `Login.tsx`:**
+- Adicionar link "Esqueci minha senha" abaixo do campo de senha, apontando para `/esqueci-senha`
 
-Criar uma Edge Function `admin-reset-password` que:
-- Valida que o chamador é admin (mesmo padrão da `get-user-emails`)
-- Recebe o `user_id` e o `email` do usuário alvo
-- Usa `serviceClient.auth.admin.generateLink({ type: 'recovery', email })` para gerar um link de recuperação
-- Retorna sucesso (o e-mail de reset é enviado automaticamente pelo sistema de auth)
+**Alterar `App.tsx`:**
+- Adicionar rotas `/esqueci-senha` e `/reset-password`
 
-**Alterações em `AdminDashboard.tsx`:**
-- Adicionar botão de "Resetar senha" (ícone `KeyRound`) na coluna de ações de cada usuário
-- Adicionar AlertDialog de confirmação antes de disparar o reset
-- Ao confirmar, chamar a Edge Function e registrar a ação no log de auditoria
-- Toast de sucesso/erro
+### 2. Como definir o administrador
 
-**Alterações em `supabase/config.toml`:**
-- Adicionar `[functions.admin-reset-password]` com `verify_jwt = false`
+Para definir o primeiro administrador, é necessário inserir o papel diretamente no banco de dados. Após a implementação, vou executar uma migração SQL que insere o papel `admin` para o seu usuário na tabela `user_roles`. Você precisará me informar o e-mail da conta que será admin, e eu uso uma query para buscar o `user_id` correspondente e inserir o papel.
+
+Depois que o primeiro admin existir, ele pode promover outros usuários pelo painel admin (`/admin`).
 
 ### Arquivos modificados
-- `src/pages/AdminDashboard.tsx` - paginação/filtros de auditoria + botão reset senha
-- `supabase/functions/admin-reset-password/index.ts` - nova Edge Function
-- `supabase/config.toml` - configuração da nova função
-
-### Sobre o teste de login
-
-Não é possível fazer login automatizado no browser de teste pois ele não compartilha a sessão do preview. Recomendo que você teste manualmente após a implementação.
+- `src/pages/Login.tsx` — link "Esqueci minha senha"
+- `src/pages/EsqueciSenha.tsx` — nova página (formulário de recuperação)
+- `src/pages/ResetPassword.tsx` — nova página (definir nova senha)
+- `src/App.tsx` — novas rotas
 
