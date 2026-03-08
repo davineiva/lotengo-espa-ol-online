@@ -437,6 +437,14 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* ===== GESTÃO DE ALUNOS TAB ===== */}
+          <TabsContent value="gestao">
+            <GestaoAlunosTab
+              profiles={profiles.map((p) => ({ user_id: p.user_id, full_name: p.full_name }))}
+              userRoles={userRoles.map((r) => ({ user_id: r.user_id, role: r.role }))}
+            />
+          </TabsContent>
+
           {/* ===== AUDIT TAB ===== */}
           <TabsContent value="auditoria">
             <Card>
