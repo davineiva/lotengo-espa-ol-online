@@ -14,7 +14,7 @@ const Footer = () => {
             <p className="text-sm mt-2">Escola de Espanhol Online</p>
           </div>
           <div className="flex gap-6 text-sm">
-            <Link to="/politica-privacidade" className="hover:text-background transition-colors">
+            <Link to="/privacidade" className="hover:text-background transition-colors">
               Política de Privacidade
             </Link>
             <a href="#contato" className="hover:text-background transition-colors">
