@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Search, ChevronLeft, ChevronRight, Users, AlertTriangle, UserX } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Users, AlertTriangle, UserX, ShieldAlert, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -19,6 +19,16 @@ type StudentManagement = {
   payment_status: string;
   payment_due_date: string | null;
   notes: string | null;
+};
+
+type DeletionRequest = {
+  id: string;
+  user_id: string;
+  status: string;
+  reason: string | null;
+  admin_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
 };
 
 type Profile = {
@@ -56,6 +66,10 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
   const [teacherFilter, setTeacherFilter] = useState("todos");
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Deletion requests
+  const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
+  const [loadingDeletions, setLoadingDeletions] = useState(true);
+
   const students = userRoles.filter((r) => r.role === "aluno").map((r) => r.user_id);
   const teachers = userRoles.filter((r) => r.role === "professor").map((r) => r.user_id);
 
@@ -75,7 +89,16 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
     setLoading(false);
   };
 
-  // Auto-create records for students without one
+  const fetchDeletionRequests = async () => {
+    setLoadingDeletions(true);
+    const { data } = await supabase
+      .from("data_deletion_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setDeletionRequests(data as DeletionRequest[]);
+    setLoadingDeletions(false);
+  };
+
   const ensureRecords = async () => {
     const existingIds = records.map((r) => r.student_id);
     const missing = students.filter((s) => !existingIds.includes(s));
@@ -88,6 +111,7 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
 
   useEffect(() => {
     fetchRecords();
+    fetchDeletionRequests();
   }, []);
 
   useEffect(() => {
@@ -111,6 +135,22 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
     }
   };
 
+  const handleDeletionAction = async (requestId: string, action: "aprovado" | "rejeitado") => {
+    const { error } = await supabase
+      .from("data_deletion_requests")
+      .update({
+        status: action,
+        resolved_at: new Date().toISOString(),
+      } as any)
+      .eq("id", requestId);
+    if (error) {
+      toast.error("Erro: " + error.message);
+    } else {
+      toast.success(action === "aprovado" ? "Solicitação aprovada." : "Solicitação rejeitada.");
+      fetchDeletionRequests();
+    }
+  };
+
   // Filter
   const filtered = records.filter((r) => {
     const name = getStudentName(r.student_id).toLowerCase();
@@ -128,10 +168,11 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
   const totalAtivos = records.filter((r) => r.is_active).length;
   const totalInadimplentes = records.filter((r) => r.payment_status === "atrasado").length;
   const totalSemProfessor = records.filter((r) => !r.assigned_teacher_id).length;
+  const pendingDeletions = deletionRequests.filter((r) => r.status === "pendente").length;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Alunos Ativos</CardTitle>
@@ -153,7 +194,73 @@ const GestaoAlunosTab = ({ profiles, userRoles }: Props) => {
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">{totalSemProfessor}</div></CardContent>
         </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Exclusões Pendentes</CardTitle>
+            <ShieldAlert className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-destructive">{pendingDeletions}</div></CardContent>
+        </Card>
       </div>
+
+      {/* Deletion Requests Section */}
+      {deletionRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" /> Solicitações de Exclusão de Dados (LGPD)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingDeletions ? (
+              <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Aluno</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Motivo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deletionRequests.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{getStudentName(req.user_id)}</TableCell>
+                      <TableCell className="text-sm">{new Date(req.created_at).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{req.reason || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={req.status === "pendente" ? "outline" : req.status === "aprovado" ? "default" : "secondary"}>
+                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {req.status === "pendente" && (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="outline" className="text-green-600" onClick={() => handleDeletionAction(req.id, "aprovado")}>
+                              <Check className="h-4 w-4 mr-1" /> Aprovar
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleDeletionAction(req.id, "rejeitado")}>
+                              <X className="h-4 w-4 mr-1" /> Rejeitar
+                            </Button>
+                          </div>
+                        )}
+                        {req.status !== "pendente" && (
+                          <span className="text-sm text-muted-foreground">
+                            {req.resolved_at ? new Date(req.resolved_at).toLocaleDateString("pt-BR") : "—"}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

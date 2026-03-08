@@ -1,15 +1,66 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, BookOpen, ClipboardList, GraduationCap, CalendarDays } from "lucide-react";
+import { LogOut, BookOpen, ClipboardList, GraduationCap, CalendarDays, ShieldAlert } from "lucide-react";
 import { Navigate, Link } from "react-router-dom";
 import MaterialTab from "@/components/dashboard/MaterialTab";
 import TarefasTab from "@/components/dashboard/TarefasTab";
 import ExamesTab from "@/components/dashboard/ExamesTab";
 import AgendaTab from "@/components/dashboard/AgendaTab";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const { user, roles, loading, signOut } = useAuth();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [existingRequest, setExistingRequest] = useState<{ status: string; created_at: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from("data_deletion_requests")
+        .select("status, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) setExistingRequest(data[0]);
+        });
+    }
+  }, [user]);
+
+  const handleRequestDeletion = async () => {
+    if (!user) return;
+    setSubmitting(true);
+    const { error } = await supabase.from("data_deletion_requests").insert({
+      user_id: user.id,
+      reason: deleteReason || null,
+    });
+    if (error) {
+      toast.error("Erro ao enviar solicitação: " + error.message);
+    } else {
+      toast.success("Solicitação de exclusão enviada com sucesso.");
+      setExistingRequest({ status: "pendente", created_at: new Date().toISOString() });
+    }
+    setSubmitting(false);
+    setShowDeleteDialog(false);
+    setDeleteReason("");
+  };
 
   if (loading) {
     return (
@@ -22,6 +73,12 @@ const Dashboard = () => {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
+
+  const STATUS_LABELS: Record<string, string> = {
+    pendente: "Pendente",
+    aprovado: "Aprovado",
+    rejeitado: "Rejeitado",
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,12 +111,32 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <h1 className="font-heading font-bold text-3xl mb-1">
-          Olá, bem-vindo(a)! 👋
-        </h1>
-        <p className="text-muted-foreground mb-6">
-          Seu papel: <span className="font-semibold text-primary capitalize">{roles[0] || "aluno"}</span>
-        </p>
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="font-heading font-bold text-3xl mb-1">
+              Olá, bem-vindo(a)! 👋
+            </h1>
+            <p className="text-muted-foreground">
+              Seu papel: <span className="font-semibold text-primary capitalize">{roles[0] || "aluno"}</span>
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            {existingRequest && existingRequest.status === "pendente" ? (
+              <Badge variant="outline" className="gap-1">
+                <ShieldAlert className="w-3 h-3" />
+                Exclusão solicitada — {STATUS_LABELS[existingRequest.status]}
+              </Badge>
+            ) : existingRequest && existingRequest.status === "rejeitado" ? (
+              <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                <ShieldAlert className="w-4 h-4 mr-2" /> Solicitar exclusão de dados
+              </Button>
+            ) : !existingRequest || existingRequest.status !== "aprovado" ? (
+              <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                <ShieldAlert className="w-4 h-4 mr-2" /> Solicitar exclusão de dados
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
         <Tabs defaultValue="material" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-1">
@@ -83,6 +160,38 @@ const Dashboard = () => {
           <TabsContent value="agenda"><AgendaTab /></TabsContent>
         </Tabs>
       </main>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Solicitar exclusão de dados pessoais</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Conforme a LGPD (Art. 18), você tem o direito de solicitar a exclusão dos seus dados pessoais.
+              </p>
+              <p className="font-semibold text-destructive">
+                ⚠️ Atenção: Ao solicitar a exclusão, todos os seus dados (materiais, tarefas, notas, perfil) poderão ser permanentemente removidos. Esta ação não pode ser desfeita após aprovação.
+              </p>
+              <Textarea
+                placeholder="Motivo (opcional)..."
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="mt-2"
+              />
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleRequestDeletion}
+              disabled={submitting}
+            >
+              {submitting ? "Enviando..." : "Confirmar solicitação"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
