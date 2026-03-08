@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download, ClipboardList, KeyRound } from "lucide-react";
+import { LogOut, ArrowLeft, Trash2, Shield, Users, GraduationCap, Search, ChevronLeft, ChevronRight, Download, ClipboardList, KeyRound, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import GestaoAlunosTab from "@/components/admin/GestaoAlunosTab";
 
 type Profile = {
   id: string;
@@ -327,6 +328,7 @@ const AdminDashboard = () => {
         <Tabs defaultValue="usuarios">
           <TabsList>
             <TabsTrigger value="usuarios"><Users className="h-4 w-4 mr-2" /> Usuários</TabsTrigger>
+            <TabsTrigger value="gestao"><BookOpen className="h-4 w-4 mr-2" /> Gestão de Alunos</TabsTrigger>
             <TabsTrigger value="auditoria"><ClipboardList className="h-4 w-4 mr-2" /> Auditoria</TabsTrigger>
           </TabsList>
 
@@ -433,6 +435,14 @@ const AdminDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ===== GESTÃO DE ALUNOS TAB ===== */}
+          <TabsContent value="gestao">
+            <GestaoAlunosTab
+              profiles={profiles.map((p) => ({ user_id: p.user_id, full_name: p.full_name }))}
+              userRoles={userRoles.map((r) => ({ user_id: r.user_id, role: r.role }))}
+            />
           </TabsContent>
 
           {/* ===== AUDIT TAB ===== */}

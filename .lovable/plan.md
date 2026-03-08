@@ -1,62 +1,40 @@
 
 
-## Respostas e Plano
+## Plano: Paginação/Filtros na Auditoria + Reset de Senha pelo Admin
 
-### 1. LGPD -- Estado atual e pendencias
+### 1. Paginação e filtros na aba de Auditoria
 
-O site ja possui:
-- Checkbox obrigatorio de consentimento no cadastro
-- Registro do timestamp de consentimento no banco (`lgpd_consent`, `lgpd_consent_at`)
-- RLS protegendo dados pessoais
+Atualmente a aba de auditoria mostra os últimos 50 logs sem filtro nem paginação.
 
-**Pendencias para conformidade real:**
-- O link "Politica de Privacidade" no cadastro aponta para `/privacidade`, que retorna 404. No footer aponta para `/politica-privacidade`, tambem 404. E necessario criar uma pagina real com a politica.
-- Falta uma pagina de Termos de Uso.
-- Falta mecanismo para o usuario solicitar exclusao dos seus dados (direito de eliminacao LGPD Art. 18).
-- Recomenda-se identificar um Encarregado de Dados (DPO) e exibir contato na politica.
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar estados: `auditSearchQuery`, `auditActionFilter`, `auditCurrentPage`
+- Filtrar logs por texto (detalhes/nome do admin) e por tipo de ação (`add_role`, `remove_role`, `delete_profile`, `reset_password`)
+- Paginar com 10 itens por página, reutilizando o mesmo padrão de paginação da aba de usuários
+- Aumentar o limite de busca de 50 para 200 logs
 
-**Resumo: o site tem a base tecnica, mas precisa da pagina de politica de privacidade real para ir a producao.**
+### 2. Reset de senha de usuário pelo admin
 
-### 2. Limites de alunos
+Criar uma Edge Function `admin-reset-password` que:
+- Valida que o chamador é admin (mesmo padrão da `get-user-emails`)
+- Recebe o `user_id` e o `email` do usuário alvo
+- Usa `serviceClient.auth.admin.generateLink({ type: 'recovery', email })` para gerar um link de recuperação
+- Retorna sucesso (o e-mail de reset é enviado automaticamente pelo sistema de auth)
 
-Nao ha limite tecnico imposto pelo sistema. O banco suporta milhares de registros sem problemas. O unico limite pratico e o do plano Lovable/infraestrutura (armazenamento de arquivos, volume de requisicoes).
+**Alterações em `AdminDashboard.tsx`:**
+- Adicionar botão de "Resetar senha" (ícone `KeyRound`) na coluna de ações de cada usuário
+- Adicionar AlertDialog de confirmação antes de disparar o reset
+- Ao confirmar, chamar a Edge Function e registrar a ação no log de auditoria
+- Toast de sucesso/erro
 
-### 3. Plano: Gestao avancada de alunos pelo Admin
+**Alterações em `supabase/config.toml`:**
+- Adicionar `[functions.admin-reset-password]` com `verify_jwt = false`
 
-Adicionar ao painel administrativo funcionalidades para controle de alunos ativos, pagamentos e atribuicao de professor.
+### Arquivos modificados
+- `src/pages/AdminDashboard.tsx` - paginação/filtros de auditoria + botão reset senha
+- `supabase/functions/admin-reset-password/index.ts` - nova Edge Function
+- `supabase/config.toml` - configuração da nova função
 
-#### Banco de dados -- nova tabela
+### Sobre o teste de login
 
-**`student_management`**:
-- `id` uuid PK
-- `student_id` uuid NOT NULL (referencia ao user_id do aluno)
-- `assigned_teacher_id` uuid NULL (user_id do professor atribuido)
-- `is_active` boolean DEFAULT true
-- `payment_status` text DEFAULT 'pendente' (pendente, pago, atrasado, isento)
-- `payment_due_date` date NULL
-- `notes` text NULL (observacoes do admin)
-- `created_at` timestamptz DEFAULT now()
-- `updated_at` timestamptz DEFAULT now()
-- UNIQUE(student_id)
-- RLS: apenas admins podem CRUD
-
-#### Alteracoes no AdminDashboard
-
-Adicionar uma **terceira aba "Gestao de Alunos"** com:
-- Tabela mostrando: Nome do aluno, Professor atribuido (select para trocar), Status ativo/inativo (toggle), Status pagamento (select: pendente/pago/atrasado/isento), Data vencimento, Observacoes
-- Filtros por: status ativo/inativo, status pagamento, professor
-- Indicadores no topo: total ativos, total inadimplentes, total sem professor
-
-#### Pagina de Politica de Privacidade
-
-Criar `/privacidade` com texto padrao LGPD cobrindo: dados coletados, finalidade, base legal, direitos do titular, contato do responsavel. Corrigir o link do footer para apontar para a mesma rota.
-
-#### Arquivos criados/modificados
-
-- **Migracao SQL**: criar tabela `student_management` com RLS, trigger de `updated_at`
-- `src/pages/PoliticaPrivacidade.tsx` -- pagina da politica
-- `src/pages/AdminDashboard.tsx` -- adicionar aba "Gestao de Alunos"
-- `src/components/admin/GestaoAlunosTab.tsx` -- componente da nova aba
-- `src/App.tsx` -- adicionar rota `/privacidade`
-- `src/components/landing/Footer.tsx` -- corrigir link
+Não é possível fazer login automatizado no browser de teste pois ele não compartilha a sessão do preview. Recomendo que você teste manualmente após a implementação.
 

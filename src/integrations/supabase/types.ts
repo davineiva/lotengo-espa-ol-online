@@ -222,6 +222,42 @@ export type Database = {
         }
         Relationships: []
       }
+      student_management: {
+        Row: {
+          assigned_teacher_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          payment_due_date: string | null
+          payment_status: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_teacher_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payment_due_date?: string | null
+          payment_status?: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_teacher_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payment_due_date?: string | null
+          payment_status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       student_notes: {
         Row: {
           content: string
