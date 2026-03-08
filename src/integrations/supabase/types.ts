@@ -103,6 +103,38 @@ export type Database = {
         }
         Relationships: []
       }
+      material_assignments: {
+        Row: {
+          assigned_by: string
+          created_at: string
+          id: string
+          material_id: string
+          student_id: string
+        }
+        Insert: {
+          assigned_by: string
+          created_at?: string
+          id?: string
+          material_id: string
+          student_id: string
+        }
+        Update: {
+          assigned_by?: string
+          created_at?: string
+          id?: string
+          material_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_assignments_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materials: {
         Row: {
           created_at: string
@@ -163,6 +195,54 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      student_availability: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          hour: number
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          hour: number
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          hour?: number
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      student_notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          student_id: string
+          teacher_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          student_id: string
+          teacher_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          student_id?: string
+          teacher_id?: string
         }
         Relationships: []
       }
