@@ -328,6 +328,7 @@ const AdminDashboard = () => {
         <Tabs defaultValue="usuarios">
           <TabsList>
             <TabsTrigger value="usuarios"><Users className="h-4 w-4 mr-2" /> Usuários</TabsTrigger>
+            <TabsTrigger value="gestao"><BookOpen className="h-4 w-4 mr-2" /> Gestão de Alunos</TabsTrigger>
             <TabsTrigger value="auditoria"><ClipboardList className="h-4 w-4 mr-2" /> Auditoria</TabsTrigger>
           </TabsList>
 
