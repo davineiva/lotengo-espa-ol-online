@@ -1,40 +1,36 @@
 
 
-## Plano: Paginação/Filtros na Auditoria + Reset de Senha pelo Admin
+## Plano
 
-### 1. Paginação e filtros na aba de Auditoria
+Sobre os testes: nao consigo executar testes de browser ou publicar o site no modo de planejamento. Apos aprovar este plano, farei a implementacao e voce podera testar manualmente. Para publicar, basta clicar no botao **Publish** no canto superior direito do editor.
 
-Atualmente a aba de auditoria mostra os últimos 50 logs sem filtro nem paginação.
+A pagina de Politica de Privacidade ja existe em `/privacidade` e `/politica-privacidade` -- ambas as rotas estao registradas no App.tsx.
 
-**Alterações em `AdminDashboard.tsx`:**
-- Adicionar estados: `auditSearchQuery`, `auditActionFilter`, `auditCurrentPage`
-- Filtrar logs por texto (detalhes/nome do admin) e por tipo de ação (`add_role`, `remove_role`, `delete_profile`, `reset_password`)
-- Paginar com 10 itens por página, reutilizando o mesmo padrão de paginação da aba de usuários
-- Aumentar o limite de busca de 50 para 200 logs
+### Implementacao: Solicitacao de exclusao de dados (LGPD Art. 18)
 
-### 2. Reset de senha de usuário pelo admin
+**Nova tabela `data_deletion_requests`:**
+- `id` uuid PK
+- `user_id` uuid NOT NULL
+- `status` text DEFAULT 'pendente' (pendente, aprovado, rejeitado)
+- `reason` text NULL
+- `admin_notes` text NULL
+- `created_at` timestamptz DEFAULT now()
+- `resolved_at` timestamptz NULL
+- `resolved_by` uuid NULL
+- RLS: aluno pode INSERT e SELECT nos proprios; admin pode SELECT e UPDATE todos
 
-Criar uma Edge Function `admin-reset-password` que:
-- Valida que o chamador é admin (mesmo padrão da `get-user-emails`)
-- Recebe o `user_id` e o `email` do usuário alvo
-- Usa `serviceClient.auth.admin.generateLink({ type: 'recovery', email })` para gerar um link de recuperação
-- Retorna sucesso (o e-mail de reset é enviado automaticamente pelo sistema de auth)
+**Dashboard do aluno (`src/pages/Dashboard.tsx`):**
+- Adicionar secao "Meus Dados" ou botao no header com icone de escudo/lixeira
+- Ao clicar, abre dialog com aviso sobre consequencias da exclusao, campo opcional de motivo, e botao de confirmacao
+- Mostra status da solicitacao se ja existir uma pendente
 
-**Alterações em `AdminDashboard.tsx`:**
-- Adicionar botão de "Resetar senha" (ícone `KeyRound`) na coluna de ações de cada usuário
-- Adicionar AlertDialog de confirmação antes de disparar o reset
-- Ao confirmar, chamar a Edge Function e registrar a ação no log de auditoria
-- Toast de sucesso/erro
+**Painel Admin (`src/pages/AdminDashboard.tsx`):**
+- Adicionar indicador de solicitacoes pendentes
+- Na aba Gestao de Alunos ou nova sub-secao, listar solicitacoes com botoes para aprovar/rejeitar
+- Ao aprovar, o admin exclui manualmente os dados ou aciona um processo de exclusao
 
-**Alterações em `supabase/config.toml`:**
-- Adicionar `[functions.admin-reset-password]` com `verify_jwt = false`
-
-### Arquivos modificados
-- `src/pages/AdminDashboard.tsx` - paginação/filtros de auditoria + botão reset senha
-- `supabase/functions/admin-reset-password/index.ts` - nova Edge Function
-- `supabase/config.toml` - configuração da nova função
-
-### Sobre o teste de login
-
-Não é possível fazer login automatizado no browser de teste pois ele não compartilha a sessão do preview. Recomendo que você teste manualmente após a implementação.
+**Arquivos criados/modificados:**
+- Migracao SQL: tabela `data_deletion_requests` com RLS
+- `src/pages/Dashboard.tsx` -- adicionar botao e dialog de solicitacao
+- `src/components/admin/GestaoAlunosTab.tsx` -- listar e gerenciar solicitacoes de exclusao
 
