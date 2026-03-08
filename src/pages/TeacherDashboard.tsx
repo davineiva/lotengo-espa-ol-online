@@ -1,11 +1,12 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Upload, ClipboardList, Users } from "lucide-react";
+import { LogOut, Upload, ClipboardList, Users, Clock } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import UploadMaterialTab from "@/components/teacher/UploadMaterialTab";
 import CriarTarefaTab from "@/components/teacher/CriarTarefaTab";
 import GerenciarAlunosTab from "@/components/teacher/GerenciarAlunosTab";
+import HorariosTab from "@/components/teacher/HorariosTab";
 
 const TeacherDashboard = () => {
   const { user, roles, loading, signOut } = useAuth();
@@ -49,7 +50,7 @@ const TeacherDashboard = () => {
         </p>
 
         <Tabs defaultValue="material" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto gap-1">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-1">
             <TabsTrigger value="material" className="gap-2 text-xs sm:text-sm py-2">
               <Upload className="w-4 h-4" /> Material
             </TabsTrigger>
@@ -59,11 +60,15 @@ const TeacherDashboard = () => {
             <TabsTrigger value="alunos" className="gap-2 text-xs sm:text-sm py-2">
               <Users className="w-4 h-4" /> Alunos
             </TabsTrigger>
+            <TabsTrigger value="horarios" className="gap-2 text-xs sm:text-sm py-2">
+              <Clock className="w-4 h-4" /> Horários
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="material"><UploadMaterialTab /></TabsContent>
           <TabsContent value="tarefas"><CriarTarefaTab /></TabsContent>
           <TabsContent value="alunos"><GerenciarAlunosTab /></TabsContent>
+          <TabsContent value="horarios"><HorariosTab /></TabsContent>
         </Tabs>
       </main>
     </div>

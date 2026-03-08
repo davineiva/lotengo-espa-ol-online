@@ -1,15 +1,42 @@
-import { useState } from "react";
-import { CalendarDays } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { CalendarDays, Loader2, Save } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const DAYS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 08:00 – 19:00
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
 type SlotKey = `${number}-${number}`;
 
 const AgendaTab = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [selected, setSelected] = useState<Set<SlotKey>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { data } = await supabase
+        .from("student_availability")
+        .select("day_of_week, hour")
+        .eq("user_id", user.id);
+
+      if (data) {
+        const keys = new Set<SlotKey>(
+          data.map((d) => `${d.day_of_week}-${d.hour}` as SlotKey)
+        );
+        setSelected(keys);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [user]);
 
   const toggle = (day: number, hour: number) => {
     const key: SlotKey = `${day}-${hour}`;
@@ -21,11 +48,54 @@ const AgendaTab = () => {
     });
   };
 
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+
+    // Delete all existing and re-insert
+    await supabase.from("student_availability").delete().eq("user_id", user.id);
+
+    if (selected.size > 0) {
+      const rows = Array.from(selected).map((key) => {
+        const [day, hour] = key.split("-").map(Number);
+        return { user_id: user.id, day_of_week: day, hour };
+      });
+
+      const { error } = await supabase.from("student_availability").insert(rows);
+      if (error) {
+        toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+    }
+
+    toast({ title: "Disponibilidade salva!" });
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <CalendarDays className="w-6 h-6 text-primary" />
-        <h2 className="font-heading font-bold text-xl">Agenda – Disponibilidade</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <CalendarDays className="w-6 h-6 text-primary" />
+          <h2 className="font-heading font-bold text-xl">Agenda – Disponibilidade</h2>
+        </div>
+        <Button onClick={handleSave} disabled={saving} size="sm">
+          {saving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          Salvar
+        </Button>
       </div>
 
       <p className="text-sm text-muted-foreground">
